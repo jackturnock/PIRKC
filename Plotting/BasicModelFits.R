@@ -85,7 +85,7 @@ fmort_trawl_dev<-as.numeric(PAR[(cnt+1):(cnt+length(TrawlYears))])
 
 #==estimated selectivities
 cnt<-grep("srv_q",PAR)
-srvQ<-as.numeric(PAR[cnt+1])
+srvQ<-as.numeric(PAR[cnt+1:(BegOffset+yearsDat)])
 cnt<-grep("srv_sel50",PAR)
 sel50surv<-as.numeric(PAR[cnt+1])
 cnt<-grep("srv_sel95",PAR)
@@ -96,7 +96,7 @@ sel50fish<-as.numeric(PAR[cnt+1])
 cnt<-grep("fish_sel95",PAR)
 sel95fish<-as.numeric(PAR[cnt+1])
 
-SurvSel<-srvQ/( 1 + exp( -1*log(19)*(LenBins-sel50surv)/(sel95surv-sel50surv)))
+SurvSel<-1/( 1 + exp( -1*log(19)*(LenBins-sel50surv)/(sel95surv-sel50surv)))
 FishSel<-1/( 1 + exp( -1*log(19)*(LenBins-sel50fish)/(sel95fish-sel50fish)))
 
 cnt<-grep("af",PAR)
@@ -167,7 +167,7 @@ apply(obsSurMlen,1,sum,na.rm=T)
 
 plot(obsTrawl~TrawlYears,ylab="Trawl (t)",las=1,xlim=c(min(Years),max(Years)))
 lines(predTrawl[(1+BegOffset):(yearsDat+BegOffset)]~Years)
-cbind(predSurM[(2+BegOffset):((yearsDat+1)+BegOffset)]/10000,Years)
+#cbind(predSurM[(2+BegOffset):((yearsDat+1)+BegOffset)]/10000,Years)
 
 #==========================================
 #==Find the tier 4 OFL using the running average
@@ -306,16 +306,19 @@ mtext(side=3,outer=T,"Females")
 #   Par file quantities
 #================================================
 dev.new()
-par(mfrow=c(4,1),mar=c(1,4,1,1),oma=c(3,1,1,1))
+par(mfrow=c(5,1),mar=c(.1,5,.1,1),oma=c(3,1,1,1))
 TotRec<-exp(meanREC+recDevs)
 TotFdir<-exp(logFdir+fmort_dir_dev)
 TotFdir<-c(rep(0,18),TotFdir,rep(0,(yearsDat-24)))
 TotFtrawl<-exp(logFtrawl+fmort_trawl_dev)
 
-plot(TotRec[1:yearsDat]/10000~Years[1:yearsDat],type="l",las=1,ylab="Recruitment (10000s)")
-plot(TotFdir~Years,type="l",las=1,ylab="Directed F",xlim=c(min(Years),max(Years)))
-plot(TotFtrawl~TrawlYears,type="l",las=1,ylab="Trawl F",xlim=c(min(Years),max(Years)))
-
+plot(TotRec[1:yearsDat]/10000~Years[1:yearsDat],type="l",las=1,ylab="Recruitment
+ (10000s)",xaxt='n')
+plot(TotFdir~Years,type="l",las=1,ylab="Directed F",xlim=c(min(Years),max(Years)),xaxt='n')
+plot(TotFtrawl~TrawlYears,type="l",las=1,ylab="Trawl F",xlim=c(min(Years),max(Years)),xaxt='n')
+plot(srvQ[6:45]~yearsData,type="l",las=1,ylab="Survey 
+ catchability",xlim=c(min(Years),max(Years)),ylim=c(0,1))
+par(mar=c(.1,5,2,1))
 plot(SurvSel~LenBins,type="l",xlab="Length",ylab="Selectivity")
 mtext(side=1,"Length",line=2)
 lines(FishSel~LenBins,lty=2,col=2)
@@ -450,7 +453,7 @@ PredsTable<-cbind(round(TotRec),round(fspbio[(2+BegOffset):(length(Years)+1+BegO
 round(mspbio[(2+BegOffset):(length(Years)+1+BegOffset)]/1000000),
 round(predSurF[(2+BegOffset):((yearsDat+1)+BegOffset)]/1000,1),
 round(predSurM[(2+BegOffset):((yearsDat+1)+BegOffset)]/1000,1))
-colnames(PredsTable)<-c("Recruitment","MMB","Survey N (females)","Survey N (males)")
+colnames(PredsTable)<-c("Recruitment","MMB","FMB","Survey N (females)","Survey N (males)")
 write.csv(PredsTable,paste(curDir,"table7.csv",sep=""))
 
 PredsTable2<-cbind(Years,round(runAvgF/1000),round(runAvgM/1000),

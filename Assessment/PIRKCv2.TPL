@@ -68,7 +68,17 @@ DATA_SECTION
   init_number trawl_sel50
   init_number trawlSlope
   init_number trawlPenSmooth
-  
+  init_number FitFemales
+  init_number TimeVaryQ
+  init_number TimeVaryQsmooth
+  init_number BBRKC_selUse
+  init_number BBRKC_sel50
+  init_number BBRKC_slope
+  init_number BBRKC_discMort
+  init_number BBRKC_discOmega
+  init_number BBRKC_discKappa
+  init_number BBRKC_discGamma
+
   int ipass;
   int Nproj;
   int IsB0;                                                         // Set to 0 for B0
@@ -77,7 +87,7 @@ DATA_SECTION
 // =======================================================================
 PARAMETER_SECTION
 
-    init_bounded_number srv_q(.99,1.,-2)
+    init_bounded_vector srv_q(styr,endyr,0.1,1,3)
 	init_bounded_number fish_sel50(137.9,138.1,-2)
 	init_bounded_number fish_sel95(137.95,138.15,-2)
 	init_bounded_number srv_sel50(50,250,1)
@@ -112,14 +122,16 @@ PARAMETER_SECTION
    vector rec_len(1,lenbinN)                                          	 // Recruitment length
   3darray len_len(1,2,1,lenbinN,1,lenbinN)                         // length to length growth array
  
-  vector sel_fish(1,lenbinN)											    // directed selectivity
-  vector sel_srv(1,lenbinN)            	                        		// Survey selectivity (do I need different eras?)
+  vector sel_fish(1,lenbinN)											    // retained selectivity
+  vector sel_fish_discard(1,lenbinN)								    // fishery discard selectivity
+  matrix sel_srv(styr,endyr+Nproj,1,lenbinN)            	    	// Survey selectivity (do I need different eras?)
   vector sel_trawl(1,lenbinN)											// selectivity for trawl bycatch
    
   //fishing mortality and survival by area
   vector fmort_dir(styr,endyr+Nproj)								//Directed fully selected F on males
   vector fmort_trawl(styr,endyr+Nproj)						    //Trawl fully selected F on males
   matrix F_dir(styr,endyr+Nproj,1,lenbinN)
+  matrix F_disc(styr,endyr+Nproj,1,lenbinN)  
   matrix F_trawl(styr,endyr+Nproj,1,lenbinN)
    
   //Numbers at length by sex (ladies first)
@@ -155,7 +167,7 @@ PARAMETER_SECTION
   number Rec_pen
   number F_pen
   number trawlF_pen
-
+  number VaryQ_pen
  
   //weight at length
   matrix WeightAtLen(1,2,1,lenbinN)
@@ -290,37 +302,90 @@ FUNCTION getgrowth
    
 // ==========================================================================
 FUNCTION getselectivity
- int j;
+ int j,i;
+ dvariable tempSel;
 
-  // logistic selectivity curves
+  // trawl selectivity curves
     for (j=1;j<=lenbinN;j++)
-     { 
-	  sel_fish(j)       =  1./(1.+mfexp(-1.*log(19) *  (length_bins(j)-fish_sel50)/(fish_sel95-fish_sel50)));
-      sel_srv(j)		   = srv_q / (1.+mfexp(-1.*log(19.)*(length_bins(j)-srv_sel50)/(srv_sel95-srv_sel50)));
-      sel_trawl(j)     = 1./(1.+mfexp(-1.*trawlSlope* (length_bins(j)-trawl_sel50))); 
-	 } 
-	 
+     sel_trawl(j)     = 1./(1.+mfexp(-1.*trawlSlope* (length_bins(j)-trawl_sel50))); 
+
+ 
+  // fishery selectivity curves (knife-edge at legal size, no discard mort)
+  if(BBRKC_selUse==0)
+  {
+    for (j=1;j<=lenbinN;j++)
+    sel_fish(j)       =  1./(1.+mfexp(-1.*log(19) *  (length_bins(j)-fish_sel50)/(fish_sel95-fish_sel50))); 
+   }
+
+  // fishery selectivity curves
+  if(BBRKC_selUse>0)
+  {
+    for (j=1;j<=lenbinN;j++)
+	{
+    sel_fish(j)       		=  1./(1.+mfexp(-1*BBRKC_slope*(length_bins(j)-BBRKC_sel50))); 
+	
+	// this is silly
+	if(lenbinN<=135)
+	{
+	 tempSel = BBRKC_discOmega + BBRKC_discKappa*length_bins(j);
+	  sel_fish_discard(j)  =0;
+     if(tempSel>0)
+      sel_fish_discard(j)  =  tempSel;
+    }
+	if(lenbinN>135)
+      sel_fish_discard(j)  =  sel_fish_discard(j-1) + 5 * BBRKC_discGamma;
+	}
+  }
+    
+ //survey selectivity curves 
+  for(i=styr;i<=endyr;i++)	 
+   for(j=1;j<=lenbinN;j++)
+   {
+	if(TimeVaryQ>0)
+     sel_srv(i,j)		   = srv_q (i)/ (1.+mfexp(-1.*log(19.)*(length_bins(j)-srv_sel50)/(srv_sel95-srv_sel50)));
+	if(TimeVaryQ==0)
+     sel_srv(i,j)		   = 1 / (1.+mfexp(-1.*log(19.)*(length_bins(j)-srv_sel50)/(srv_sel95-srv_sel50)));
+    }
+	
+  for(i=endyr+1;i<=endyr+Nproj;i++)	 
+   for(j=1;j<=lenbinN;j++)
+   {
+	if(TimeVaryQ>0)
+     sel_srv(i,j)		   = srv_q (endyr)/ (1.+mfexp(-1.*log(19.)*(length_bins(j)-srv_sel50)/(srv_sel95-srv_sel50)));
+	if(TimeVaryQ==0)
+     sel_srv(i,j)		   = 1 / (1.+mfexp(-1.*log(19.)*(length_bins(j)-srv_sel50)/(srv_sel95-srv_sel50)));
+    }
   // ==========================================================================
 FUNCTION getmortality
  int i,j;
  //Fourier forgive my hardcoding sins
 
+ //directed fishery retained and discard mortality
  for (i=1993;i<=1998;i++)
  {
-   fmort_dir(i)     = mfexp(log_avg_fmort_dir    + fmort_dir_dev(i));
-   F_dir(i) = sel_fish*fmort_dir(i);
+   fmort_dir(i) 		= mfexp(log_avg_fmort_dir    + fmort_dir_dev(i));
+   F_dir(i)			= sel_fish*fmort_dir(i);
+   F_disc(i) 		= sel_fish_discard*BBRKC_discMort;
   }
 
  for(i=styr;i<=1992;i++)
+ {
   F_dir(i) = 0; 
+  F_disc(i) = 0; 
+ }
+
  for(i=1999;i<=endyr;i++)
+ {
   F_dir(i) = 0; 
-  
+  F_disc(i) = 0; 
+ }
+ 
  for (i=styr;i<=endyr;i++)
   {
     fmort_trawl(i)  = 0;
     F_trawl(i) = sel_trawl*fmort_trawl(i); 	
    } 
+   
  for (i=1991;i<=endyrTrawl-1;i++)
   {
     fmort_trawl(i)  = mfexp(log_avg_fmort_trawl + fmort_trawl_dev(i));
@@ -366,8 +431,8 @@ FUNCTION get_num_at_len_yr
   // cout<<"NTLEN"<<Natlen(2,i)<<endl; 
 
   //survey occurs in July
-  predSurvNatlenF(i) = elem_prod(sel_srv,Natlen(1,i));
-  predSurvNatlenM(i)  = elem_prod(sel_srv,Natlen(2,i));
+  predSurvNatlenF(i) = elem_prod(sel_srv(i),Natlen(1,i));
+  predSurvNatlenM(i)  = elem_prod(sel_srv(i),Natlen(2,i));
   
   for(j=1;j<=lenbinN;j++)
    {
@@ -394,6 +459,8 @@ FUNCTION get_num_at_len_yr
 
     tempN = elem_prod(mfexp(-F_dir(i)),tempN);														//fishery occurs
 	   // cout<<"tempN"<<tempN<<endl;
+    tempN  = elem_prod(mfexp(-F_disc(i)),tempN);														//fishery discard mortality occurs
+	   // cout<<"tempN3"<<tempN<<endl;
     tempN  = elem_prod(mfexp(-F_trawl(i)),tempN);													//bycatch occurs
 	   // cout<<"tempN3"<<tempN<<endl;
     PredTrawlAtLen(sex,i) = elem_prod(1-mfexp(-F_trawl(i)),tempN);							//predicted bycatch at length
@@ -477,25 +544,27 @@ FUNCTION evaluate_the_objective_function
     for(i=1;i<=nobs_bycatch;i++)
     	Trawl_like +=  square(log(TrawlBycatch20off(i) + smallNum) - log(predTrawlCatchN(1,yrs_bycatch(i)) + predTrawlCatchN(2,yrs_bycatch(i)) + smallNum))  / (sqrt(2) * sqrt(log(byCatcv*byCatcv+ 1)  ));
 
-		// cout<<"yrs_bycatch"<<endyrTrawl<<endl;
-  // initsmo_penalF = InitSmoothWeight*(norm2(first_difference(stNatLenF)));							//penalties on initial smoothness
-  // initsmo_penalM = InitSmoothWeight*(norm2(first_difference(stNatLenM)));
   Rec_pen = InitSmoothWeight*(norm2(first_difference(rec_dev)));
   F_pen = InitSmoothWeight*(norm2(first_difference(fmort_dir_dev)));
   trawlF_pen = trawlPenSmooth*(norm2(first_difference(fmort_trawl_dev)));
+  VaryQ_pen = TimeVaryQsmooth*(norm2(first_difference(srv_q(styr,endyr))));
+
   
  f = 0;
  f += SurvM_like;
- //f += SurvF_like;
  f += SurvMLen_like;
-// f += SurvFLen_like;
+ if(FitFemales>0)
+ {
+  f += SurvF_like;
+  f += SurvFLen_like;
+ }
  f += Catch_like; 
  f += Trawl_like;
- f += initsmo_penalF;
- f += initsmo_penalM;
  f += Rec_pen;
  f += F_pen;
  f += trawlF_pen;
+ if(TimeVaryQ>0)
+ f += VaryQ_pen;
  cout << current_phase() << " " << call_no << " " << f << endl;
  
  // ==========================================================================
@@ -843,8 +912,7 @@ FINAL_SECTION
  cout<<"Survey F len"<<SurvFLen_like<<endl;
  cout<<"Catch"<<Catch_like<<endl;
  cout<<"Trawl"<<Trawl_like<<endl;
- cout<<"initsmo_penalM"<<initsmo_penalM<<endl;
- cout<<"initsmo_penalF"<<initsmo_penalF<<endl; 
+ cout<<"VaryQ_pen"<<VaryQ_pen<<endl; 
  cout<<"trawlF_pen"<<trawlF_pen<<endl; 
  cout<<"F_pen"<<F_pen<<endl; 
  cout<<"Rec_pen"<<Rec_pen<<endl; 

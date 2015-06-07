@@ -29,4 +29,32 @@
 # trawl smoothness
  1
 # fit females? (0= no,1 = yes)
+ 1
+# Time-varying catchability
+ 1
+# Time-varying catchability smoothness
+ 0
+#======================================
+# Use BBRKC fishery selectivity?
+#======================================
+ 1
+# BBRKC retained selectivity L50 (exponentiated from 2014)
+ 137.1397
+# BBRKC retained slope (2014)
+ 0.530 
+# BBRKC discard mortality
+ 0.2
+# BBRKC discard omega
+ -.332
+# BBRKC discard kappa
+ 0.004
+# BBRKC discard gamma
+ -0.015
+#=================================
+# Use BBRKC molting probability?
+#=================================
+ 0
+# BBRKC molting probability PAR1
+ 0
+# BBRKC molting probability PAR2
  0
