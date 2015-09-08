@@ -317,24 +317,27 @@ FUNCTION getselectivity
     sel_fish(j)       =  1./(1.+mfexp(-1.*log(19) *  (length_bins(j)-fish_sel50)/(fish_sel95-fish_sel50))); 
    }
 
-  // fishery selectivity curves
+  // fishery selectivity curves (borrowed from Jie) THIS SHOULD BE CHECKED
   if(BBRKC_selUse>0)
   {
     for (j=1;j<=lenbinN;j++)
 	{
     sel_fish(j)       		=  1./(1.+mfexp(-1*BBRKC_slope*(length_bins(j)-BBRKC_sel50))); 
 	
-	// this is silly
-	if(lenbinN<=135)
+	// this is silly--don't blame me for it!
+	if(length_bins(j)<=138)
 	{
 	 tempSel = BBRKC_discOmega + BBRKC_discKappa*length_bins(j);
 	  sel_fish_discard(j)  =0;
      if(tempSel>0)
       sel_fish_discard(j)  =  tempSel;
     }
-	if(lenbinN>135)
+	if(length_bins(j)>138)
       sel_fish_discard(j)  =  sel_fish_discard(j-1) + 5 * BBRKC_discGamma;
-	}
+  
+  	if(sel_fish_discard(j)<0)
+		sel_fish_discard(j) =0;
+  	}
   }
     
  //survey selectivity curves 
@@ -519,8 +522,10 @@ FUNCTION evaluate_the_objective_function
  //Survey abundance
 	for(i=2;i<=nobs_survey;i++)
 	 {
-	 SurvM_like +=  square(log(SurvMnum(i) + smallNum) - log(predSurvM(yrs_survey(i)) + smallNum))  / (sqrt(2) * sqrt(log(ShrinkCV*SurvMcv(i)*SurvMcv(i) + 1)  ));
-	 SurvF_like  +=  square(log(SurvFnum(i) + smallNum) - log(predSurvF(yrs_survey(i)) + smallNum))   / (sqrt(2) * sqrt(log(ShrinkCV*SurvFcv(i)*SurvFcv(i) + 1)  ));
+	  if(SurvMcv(i)>0)
+	   SurvM_like +=  square(log(SurvMnum(i) + smallNum) - log(predSurvM(yrs_survey(i)) + smallNum))  / (sqrt(2) * (log(ShrinkCV*SurvMcv(i)*SurvMcv(i) + 1)  ));
+	  if(SurvFcv(i)>0)
+	   SurvF_like  +=  square(log(SurvFnum(i) + smallNum) - log(predSurvF(yrs_survey(i)) + smallNum))   / (sqrt(2) * (log(ShrinkCV*SurvFcv(i)*SurvFcv(i) + 1)  ));
 	 }
 
    //survey length frequencies
@@ -539,10 +544,10 @@ FUNCTION evaluate_the_objective_function
     predCatchN(i) += predCatchAtLen(2,yrs_catch(i),j);
 
 	for(i=1;i<=nobs_catch;i++)
-  	Catch_like +=  square(log(CatchNum(i) + smallNum) - log(predCatchN(i) + smallNum))  / (sqrt(2) * sqrt(log(Catcv*Catcv+ 1)  ));
+  	Catch_like +=  square(log(CatchNum(i) + smallNum) - log(predCatchN(i) + smallNum))  / (sqrt(2) * (log(Catcv*Catcv+ 1)  ));
  
     for(i=1;i<=nobs_bycatch;i++)
-    	Trawl_like +=  square(log(TrawlBycatch20off(i) + smallNum) - log(predTrawlCatchN(1,yrs_bycatch(i)) + predTrawlCatchN(2,yrs_bycatch(i)) + smallNum))  / (sqrt(2) * sqrt(log(byCatcv*byCatcv+ 1)  ));
+    	Trawl_like +=  square(log(TrawlBycatch20off(i) + smallNum) - log(predTrawlCatchN(1,yrs_bycatch(i)) + predTrawlCatchN(2,yrs_bycatch(i)) + smallNum))  / (sqrt(2) * (log(byCatcv*byCatcv+ 1)  ));
 
   Rec_pen = InitSmoothWeight*(norm2(first_difference(rec_dev)));
   F_pen = InitSmoothWeight*(norm2(first_difference(fmort_dir_dev)));
@@ -837,6 +842,9 @@ REPORT_SECTION
   report<<"#pred trawl bycatch male"<< endl;  
   report<<predTrawlCatchN(2)<<endl;
   
+  report<<"#sel_fish_discard"<< endl;  
+  report<<sel_fish_discard<<endl;
+    
   report<<"#size transition matrix Males"<<endl;
    for(j=1;j<=lenbinN;j++)
     report<<len_len(2,j)<<endl;

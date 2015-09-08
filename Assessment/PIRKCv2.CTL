@@ -31,7 +31,7 @@
 # fit females? (0= no,1 = yes)
  1
 # Time-varying catchability
- 1
+ 0
 # Time-varying catchability smoothness
  0
 #======================================
