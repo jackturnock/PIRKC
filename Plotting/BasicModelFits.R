@@ -1,4 +1,4 @@
-BasicModelFits<-function(REP,PAR,DAT,BIO,BootCIs=NA,mcEval,STDfile,PSV)
+BasicModelFits<-function(REP,PAR,DAT,BIO,BootCIs=NA,mcEval,STDfile,PSV,CAT)
 {
 #==read in REP and DAT files
 temp<-grep("start/end",DAT)
@@ -69,6 +69,10 @@ fspbio<-as.numeric(unlist(strsplit(REP[temp+1],split=" ")))
 temp<-grep("sel_fish_discard",REP)
 SelFishDiscard<-as.numeric(unlist(strsplit(REP[temp+1],split=" ")))
 
+#==read in Catch data for Tier 4 running average
+temp<-grep("trawl bycatch",CAT)[2]
+TrawlBycatch<-as.numeric(unlist(strsplit(CAT[temp+1],split="\t")))
+TrawlBycatch<-TrawlBycatch[!is.na(TrawlBycatch)]
 
 #==Par file quantities
 cnt<-grep("mean_log_rec",PAR)
@@ -86,6 +90,7 @@ cnt<-grep("log_avg_fmort_trawl",PAR)
 logFtrawl<-as.numeric(PAR[cnt+1])
 cnt<-grep("fmort_trawl_dev",PAR)
 fmort_trawl_dev<-as.numeric(PAR[(cnt+1):(cnt+length(TrawlYears))])
+TotFtrawl<-exp(logFtrawl+fmort_trawl_dev)
 
 #==estimated selectivities
 cnt<-grep("srv_q",PAR)
@@ -115,15 +120,15 @@ bm<-as.numeric(PAR[cnt+1])
 #=========================
 # CIs calculated from CVs from Bob
 #=================================
-#==variances of survey estimates (Bob assumes poisson)
-varM<-(log(obsSurM[2:(yearsDat+1)])*survMcv)^2
-varF<-(log(obsSurF[2:(yearsDat+1)])*survFcv)^2
+#==variances of survey estimates 
+sdM<-sqrt(log((survMcv^2)+1))
+sdF<-sqrt(log((survFcv^2)+1))
+
+varM<-sdM^2
+varF<-sdF^2
 varF[varF=='NaN']<-max(varF,na.rm=T)
 varM[varM==0]<-max(varM,na.rm=T)
 varF[varM==0]<-max(varF,na.rm=T)
-
-sdM<-log((survMcv^2)+1)
-sdF<-log((survFcv^2)+1)
 
 mCIup<-exp(log(obsSurM[2:(yearsDat+1)])+2*sdM)
 mCIdn<-exp(log(obsSurM[2:(yearsDat+1)])-2*sdM)
@@ -189,13 +194,20 @@ fspTier4cv<-BIO$CV_BIOMASS_FEMALE_MATURE
 mspTier4<-BIO$BIOMASS_MALE_GE120
 mspTier4cv<-BIO$CV_BIOMASS_MALE_GE120
 
-varM<-(log(mspTier4+0.0001)*mspTier4cv)^2
-varF<-(log(fspTier4+0.0001)*fspTier4cv)^2
-varM[varM==0]<-max(varM,na.rm=T)
-varF[varF==0]<-max(varF,na.rm=T)
+#==variances of survey estimates 
+sdM<-sqrt(log((mspTier4cv^2)+1))
+sdF<-sqrt(log((fspTier4cv^2)+1))
 
-sdM<-log((mspTier4cv)+1)
-sdF<-log((fspTier4cv)+1)
+varM<-sdM^2
+varF<-sdF^2
+varF[varF=='NaN']<-max(varF,na.rm=T)
+varM[varM==0]<-max(varM,na.rm=T)
+varF[varM==0]<-max(varF,na.rm=T)
+
+mCIup<-exp(log(mspTier4+0.001)+2*sdM)
+mCIdn<-exp(log(mspTier4+0.001)-2*sdM)
+fCIup<-exp(log(fspTier4+0.001)+2*sdF)
+fCIdn<-exp(log(fspTier4+0.001)-2*sdF)
 
 useM<-mspTier4
 runAvgMb<-rep(0,length(useM))
@@ -205,9 +217,12 @@ for(x in 2:(length(useM)-1))
 x<-length(useM)
  runAvgMb[x]<-weighted.mean(useM[(x-1):(x)],w=1/varM[(x-1):(x)])
 
-Tier4BMSY<-mean(runAvgMb[17:length(runAvgMb)])
+Tier4BMSY<-mean(useM[17:length(useM)]*exp(-.18*(8/12)))
 Tier4FOFL<-0.18
-CurB<-runAvgMb[length(runAvgMb)]*exp(-4*.18/12)
+CurB<-runAvgMb[length(runAvgMb)]
+ProjTrawlF<-mean(TotFtrawl[(length(TotFtrawl)-2):length(TotFtrawl)])
+CurB<-CurB*exp(-4*.18/12)
+CurB<-CurB*exp(-ProjTrawlF)
 testB<-CurB/Tier4BMSY
 use4fOFL<-0.18
 beta<-0.25
@@ -218,13 +233,13 @@ if(testB<1 & testB>=beta)
 if(testB<beta)
  use4fOFL<-0
 
-OFL4tier4<-(1-exp(-use4fOFL))*CurB*exp(-4*.18/12)
+OFL4tier4<-(1-exp(-use4fOFL))*CurB
 
-BootMMB<-rnorm(100000,log(CurB),sqrt(sdM[yearsDat]^2+0.3^2))
+BootMMB<-rnorm(1000000,log(CurB),sqrt(sdM[yearsDat]^2+0.3^2))
 OFL4dist<-(1-exp(-use4fOFL))*exp(BootMMB)*exp(-4*.18/12)
 temp<-sort(OFL4dist)
-temp[.95*length(temp)]
-temp[.05*length(temp)]
+OFL405<-temp[.95*length(temp)]
+OFL495<-temp[.05*length(temp)]
 ABCtier4avg<-temp[.49*length(temp)]
 
 dev.new()
@@ -434,16 +449,7 @@ write.csv(outs,paste(curDir,"/pars.csv",sep=""))
 # table of estimated abundance, abundance, biomass, 
 # running average, recruitment, catch/biomass
 #=========================
-varM<-(log(mspTier4+0.001)*mspTier4cv)^2
-varF<-(log(fspTier4+0.001)*fspTier4cv)^2
-varM[varM==0]<-max(varM,na.rm=T)
-varF[varF==0]<-max(varF,na.rm=T)
-sdM<-log((mspTier4cv)+1)
-sdF<-log((fspTier4cv)+1)
-mCIup<-exp(log(mspTier4+0.001)+2*sdM)
-mCIdn<-exp(log(mspTier4+0.001)-2*sdM)
-fCIup<-exp(log(fspTier4+0.001)+2*sdF)
-fCIdn<-exp(log(fspTier4+0.001)-2*sdF)
+
 
 #==3 year running average inverse variance weighted
 useM<-mspTier4
@@ -501,7 +507,7 @@ mcmc1 <- readBin(PSV, what=numeric(), n=nopar1 * 10000)
 mcmc1 <- matrix(mcmc1, byrow=TRUE, ncol=nopar1)
 
 objfun<-mcEval[,ncol(mcEval)]
-burnin<-0.13
+burnin<-0.1
 thin<-1
 library(coda)
 dev.new()
@@ -510,6 +516,8 @@ plot(objfun)
 hist(objfun)
 thinOb<-objfun[(burnin*length(objfun)):length(objfun)]
 thinOb1<-thinOb[seq(1,length(thinOb),thin)]
+geweke.diag(thinOb1)
+
 
 dev.new()
 par(mfrow=c(1,2))
@@ -552,13 +560,13 @@ dev.new()
 par(mfrow=c(1,2),mar=c(4,1,.2,.2),oma=c(0,3,0,0))
 hist(BMSY4/1000000,main='',col='grey',las=1,xlab="Tier 4 Bmsy")
 temp<-sort(BMSY4/1000000)
-temp[.05*length(temp)]
-temp[.95*length(temp)]
+BMSY405<-temp[.05*length(temp)]
+BMSY495<-temp[.95*length(temp)]
 
 hist(OFL4/1000000,main='',col='grey',las=1,xlab="Tier 4 OFL")
 temp<-sort(OFL4/1000000)
-temp[.05*length(temp)]
-temp[.95*length(temp)]
+OFL405int<-temp[.05*length(temp)]
+OFL495int<-temp[.95*length(temp)]
 ABCtier4<-temp[.49*length(temp)]
 
 
@@ -612,20 +620,6 @@ MCMCsel95<-mcmc1[,SelInd+2]
 MCMCselMat<-matrix(nrow=nrow(mcmc1),ncol=length(lenBins))
 for(i in 1:nrow(MCMCselMat))
  MCMCselMat[i,]<-1/(1+exp(-log(19)*(lenBins-MCMCsel50[i])/(MCMCsel95[i]-MCMCsel50[i])))
-
-#==plot model fits
-varM<-(log(mspTier4+0.001)*mspTier4cv)^2
-varF<-(log(fspTier4+0.001)*fspTier4cv)^2
-varF[varF=='NaN']<-max(varF,na.rm=T)
-varM[varM==0]<-max(varM,na.rm=T)
-varF[varM==0]<-max(varF,na.rm=T)
-
-sdM<-log((mspTier4cv)+1)
-sdF<-log((fspTier4cv)+1)
-mCIup<-exp(log(mspTier4+0.001)+2*sdM)
-mCIdn<-exp(log(mspTier4+0.001)-2*sdM)
-fCIup<-exp(log(fspTier4+0.001)+2*sdF)
-fCIdn<-exp(log(fspTier4+0.001)-2*sdF)
 
 #==3 year running average inverse variance weighted
 useM<-mspTier4
@@ -701,14 +695,14 @@ cbind(FspBio,allYears)
 #==========================================
 # histograms of management quantities
 temp<-sort(Bmsy/1000000)
-temp[.05*length(temp)]
-temp[.95*length(temp)]
+BMSY05<-temp[.05*length(temp)]
+BMSY95<-temp[.95*length(temp)]
 
 dev.new()
 par(mfrow=c(3,1),mar=c(1,1,1,1),oma=c(2,4,0,0))
 temp<-sort((MspBio)[45]/(Bmsy/1000000))
-temp[.05*length(temp)]
-temp[.95*length(temp)]
+BRAT05<-temp[.05*length(temp)]
+BRAT95<-temp[.95*length(temp)]
 Brat<-hist(temp,plot=F)
 temp<-Brat$counts/sum(Brat$counts)
 
@@ -718,16 +712,16 @@ text(x=15.,y=.12,expression(B[paste(35,"%")]),cex=1.5)
 lines(x=c(14,16),y=c(.135,.135))
 
 temp<-sort(F35)
-temp[.05*length(temp)]
-temp[.95*length(temp)]
+F3505<-temp[.05*length(temp)]
+F3595<-temp[.95*length(temp)]
 Brat<-hist(F35,plot=F)
 temp<-Brat$counts/sum(Brat$counts)
 barplot(temp,names.arg=Brat$mids)
 text(x=8,y=.2,expression(F[paste(35,"%")]),cex=1.5)
 
 temp<-sort(OFL/1000000)
-temp[.05*length(temp)]
-temp[.95*length(temp)]
+OFL05<-temp[.05*length(temp)]
+OFL95<-temp[.95*length(temp)]
 ABCtier3<-temp[.49*length(temp)]
 
 Brat<-hist(OFL/1000000,plot=F)
@@ -866,7 +860,7 @@ Bmsy_tier4<-firstMat[3,2]
 temp<-grep("OFL_tier4",REP)
 firstMat[3,1]<-round(as.numeric(unlist(strsplit(REP[temp+1],split="\t")))[2]/1000000)
 currMMB<-mspbio[(length(Years)+1+BegOffset)]/1000000
-currMMB4<-runAvgMb[length(runAvgMb)]*exp(-3*.18/12)
+currMMB4<-runAvgMb[length(runAvgMb)]
 
 colnames(firstMat)<-c("OFL","BMSY","MMB","Ratio","gamma","ABC")
 rownames(firstMat)<-c("RunAvg/Tier4","Assess/Tier3","Assess/Tier4")
@@ -886,5 +880,19 @@ firstMat[3,5]<-1
 firstMat[1,2]<-round(Tier4BMSY)
 firstMat[1,1]<-round(OFL4tier4)
 write.csv(firstMat,paste(curDir,"/IntroTable.csv",sep=""))
+
+
+#==write the variances
+varMat<-matrix(nrow=3,ncol=8)
+colnames(varMat)<-c("OFL","OFL","BMSY","BMSY","Ratio","Ratio","F35","F35")
+rownames(varMat)<-c("Tier4/RunAvg","Tier4/Int","Tier3/Int")
+varMat[1,]<-c(OFL405,OFL495,NA,NA,NA,NA,NA,NA)
+varMat[2,]<-c(OFL405int,OFL495int,BMSY405,BMSY495,NA,NA,NA,NA)
+varMat[3,]<-c(OFL05,OFL95,BMSY05,BMSY95,BRAT05,BRAT95,F3505,F3595)
+write.csv(varMat,paste(curDir,"/VarTable.csv",sep=""))
+
 }
+
+
+
 
