@@ -458,10 +458,11 @@ FUNCTION get_num_at_len_yr
     tempN = elem_prod(mfexp(-F_dir(i)),tempN);														//fishery occurs
 	   // cout<<"tempN"<<tempN<<endl;
     tempN  = elem_prod(mfexp(-F_disc(i)),tempN);														//fishery discard mortality occurs
-	   // cout<<"tempN3"<<tempN<<endl;
-    tempN  = elem_prod(mfexp(-F_trawl(i)),tempN);													//bycatch occurs
-	   // cout<<"tempN3"<<tempN<<endl;
-    PredTrawlAtLen(sex,i) = elem_prod(1-mfexp(-F_trawl(i)),tempN);							//predicted bycatch at length
+
+    PredTrawlAtLen(sex,i) = elem_prod(1-mfexp(-F_trawl(i)),tempN);					//predicted bycatch at length
+  
+   tempN  = elem_prod(mfexp(-F_trawl(i)),tempN);													//bycatch removed
+
 
 	tempBio=0;																										//predicted biomass of bycatch (t)
 	tempBio= elem_prod(PredTrawlAtLen(sex,i),WeightAtLen(sex));
@@ -537,10 +538,10 @@ FUNCTION evaluate_the_objective_function
     predCatchN(i) += predCatchAtLen(2,yrs_catch(i),j);
 
 	for(i=1;i<=nobs_catch;i++)
-  	Catch_like +=  square(log(CatchNum(i) + smallNum) - log(predCatchN(i) + smallNum))  / (sqrt(2) * sqrt(log(Catcv*Catcv+ 1)  ));
+  	Catch_like +=  square(log(CatchNum(i) + smallNum) - log(predCatchN(i) + smallNum))  / (2 * (log(Catcv*Catcv+ 1)  ));
  
     for(i=1;i<=nobs_bycatch;i++)
-    	Trawl_like +=  square(log(TrawlBycatch20off(i) + smallNum) - log(predTrawlCatchN(1,yrs_bycatch(i)) + predTrawlCatchN(2,yrs_bycatch(i)) + smallNum))  / (sqrt(2) * sqrt(log(byCatcv*byCatcv+ 1)  ));
+    	Trawl_like +=  square(log(TrawlBycatch20off(i) + smallNum) - log(predTrawlCatchN(1,yrs_bycatch(i)) + predTrawlCatchN(2,yrs_bycatch(i)) + smallNum))  / (2 * (log(byCatcv*byCatcv+ 1)  ));
 
   Rec_pen = InitSmoothWeight*(norm2(first_difference(rec_dev)));
   F_pen = InitSmoothWeight*(norm2(first_difference(fmort_dir_dev)));
