@@ -13,7 +13,7 @@
 # Initial smoothness weighting
  1
 # shrink survey CV
- 1
+ .1
 # weight parameters (male) A
  0.000361
 # weight parameter (male) B
@@ -29,11 +29,13 @@
 # trawl smoothness
  1
 # fit females? (0= no,1 = yes)
- 1
+ 0
 # Time-varying catchability
  0
 # Time-varying catchability smoothness
  0
+# Multiplier for the effective sample size for size data
+ 1
 #======================================
 # Use BBRKC fishery selectivity?
 #======================================
